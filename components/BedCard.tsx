@@ -120,11 +120,14 @@ export function BedCard({ bed, internacao }: Props) {
       >
         <span className="text-xs" style={{ color: "var(--muted)" }}>EWS</span>
         <span
-          className="flex items-center gap-1.5 px-2 py-1 rounded-md font-semibold text-xs"
-          style={{ background: `${statusColor}22`, color: statusColor }}
+          className="flex items-center gap-1 px-2 py-0.5 rounded-md text-xs tabular-nums"
+          style={{
+            background: `${statusColor}18`,
+            border: `1px solid ${statusColor}55`,
+            color: statusColor,
+          }}
         >
-          <span className="text-xs tabular-nums leading-none font-bold">{internacao.currentEws}</span>
-          {internacao.currentStatus}
+          {internacao.currentEws}&nbsp;{internacao.currentStatus}
         </span>
       </div>
     </div>

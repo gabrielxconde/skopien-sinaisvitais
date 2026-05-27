@@ -312,9 +312,11 @@ const TAB_LABELS: Record<Tab, string> = {
 function PatientContent({ id }: { id: string }) {
   const router = useRouter();
 
-  const [tab, setTab]         = useState<Tab>("sinais-vitais");
-  const [slotMin, setSlotMin] = useState(15);
+  const [tab, setTab]           = useState<Tab>("sinais-vitais");
+  const [slotMin, setSlotMin]   = useState(15);
   const [windowMs, setWindowMs] = useState(10_800_000);
+  const [camExpanded, setCamExpanded] = useState(false);
+  const [camHovered, setCamHovered]   = useState(false);
 
   const internacao = useSimulationStore((s) => s.internacoes[id] ?? null);
   const bed = useSimulationStore((s) => s.beds.find((b) => b.internacaoId === id) ?? null);
@@ -360,38 +362,82 @@ function PatientContent({ id }: { id: string }) {
               <p className="text-sm">
                 <span style={{ color: "var(--muted)" }}>EWS: </span>
                 <span
-                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold"
-                  style={{ background: `${statusColor}22`, color: statusColor }}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs tabular-nums"
+                  style={{
+                    background: `${statusColor}18`,
+                    border: `1px solid ${statusColor}55`,
+                    color: statusColor,
+                  }}
                 >
-                  <span className="font-bold">{internacao.currentEws}</span>
-                  {internacao.currentStatus}
+                  {internacao.currentEws}&nbsp;{internacao.currentStatus}
                 </span>
               </p>
             </div>
           </div>
         </div>
 
-        {/* Camera: live for PS-01, placeholder for everyone else */}
+        {/* Camera */}
         {(() => {
           const proxyUrl = process.env.NEXT_PUBLIC_CAMERA_PROXY_URL;
-          const isLiveCamera = bed?.label === "ENF-01" && !!proxyUrl;
+          const isLiveCamera = bed?.label === "UTI-01" && !!proxyUrl;
+          const streamUrl = `${proxyUrl}/stream/index.m3u8`;
           return (
-            <div className="shrink-0 rounded-lg overflow-hidden" style={{ width: 320, height: 200 }}>
-              {isLiveCamera ? (
-                <CameraPlayer streamUrl={`${proxyUrl}/stream/index.m3u8`} />
-              ) : (
+            <>
+              <div
+                className="shrink-0 rounded-lg overflow-hidden transition-all"
+                style={{
+                  width: 320,
+                  height: 200,
+                  cursor: isLiveCamera ? "pointer" : "default",
+                  border: isLiveCamera
+                    ? `2px solid ${camHovered ? "var(--accent)" : "transparent"}`
+                    : "1px solid var(--border)",
+                  boxSizing: "border-box",
+                }}
+                onClick={() => isLiveCamera && setCamExpanded(true)}
+                onMouseEnter={() => isLiveCamera && setCamHovered(true)}
+                onMouseLeave={() => setCamHovered(false)}
+              >
+                {isLiveCamera ? (
+                  <CameraPlayer streamUrl={streamUrl} />
+                ) : (
+                  <div
+                    className="w-full h-full flex flex-col items-center justify-center gap-1"
+                    style={{ background: "var(--surface)", borderRadius: "inherit" }}
+                  >
+                    <svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} style={{ color: "var(--muted)" }}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
+                    </svg>
+                    <span className="text-xs" style={{ color: "var(--muted)" }}>Câmera Indisponível</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Camera modal */}
+              {camExpanded && (
                 <div
-                  className="w-full h-full flex flex-col items-center justify-center gap-1"
-                  style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "inherit" }}
+                  className="fixed inset-0 z-50 flex items-center justify-center"
+                  style={{ background: "rgba(0,0,0,0.85)" }}
+                  onClick={() => setCamExpanded(false)}
                 >
-                  <svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} style={{ color: "var(--muted)" }}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
-                  </svg>
-                  <span className="text-xs" style={{ color: "var(--muted)" }}>Câmera Indisponível</span>
+                  <div
+                    className="relative rounded-xl overflow-hidden"
+                    style={{ width: "min(900px, 90vw)", aspectRatio: "16/9" }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <CameraPlayer streamUrl={streamUrl} />
+                    <button
+                      onClick={() => setCamExpanded(false)}
+                      className="absolute top-3 right-3 rounded-full w-8 h-8 flex items-center justify-center text-sm transition-opacity hover:opacity-80"
+                      style={{ background: "rgba(0,0,0,0.6)", color: "#fff" }}
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
               )}
-            </div>
+            </>
           );
         })()}
       </div>
