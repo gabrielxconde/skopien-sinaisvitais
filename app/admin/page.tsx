@@ -7,6 +7,8 @@ import {
 } from "recharts";
 import { AuthGuard } from "@/components/AuthGuard";
 import { Sidebar } from "@/components/Sidebar";
+import { TopBar } from "@/components/TopBar";
+import { useSidebarStore } from "@/store/sidebar";
 import { useSimulationStore } from "@/store/simulation";
 import { useShallow } from "zustand/react/shallow";
 import { useAlertStore } from "@/store/alerts";
@@ -534,17 +536,25 @@ function AlertasDashboard() {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AdminPage() {
-  const tab    = useAdminStore((s) => s.tab);
-  const setTab = useAdminStore((s) => s.setTab);
+  const tab      = useAdminStore((s) => s.tab);
+  const setTab   = useAdminStore((s) => s.setTab);
+  const collapsed = useSidebarStore((s) => s.collapsed);
 
   return (
     <AuthGuard>
       <div className="flex min-h-screen">
         <Sidebar />
         <main
-          className="flex-1 ml-56 overflow-y-auto min-h-screen p-6"
-          style={{ background: "var(--background)" }}
+          className="flex-1 overflow-y-auto flex flex-col"
+          style={{
+            marginLeft: collapsed ? 56 : 224,
+            transition: "margin-left 200ms ease",
+            minHeight: "100vh",
+            background: "var(--background)",
+          }}
         >
+          <TopBar />
+          <div className="p-6 flex-1">
           <h1 className="text-lg font-semibold mb-1">Visão Administrativa</h1>
           <p className="text-xs mb-6" style={{ color: "var(--muted)" }}>
             Indicadores gerenciais por unidade
@@ -573,6 +583,7 @@ export default function AdminPage() {
           {tab === "uti"     && <UTIDashboard   />}
           {tab === "cc"      && <CCDashboard    />}
           {tab === "alertas" && <AlertasDashboard />}
+          </div>
         </main>
       </div>
     </AuthGuard>

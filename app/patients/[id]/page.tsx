@@ -4,12 +4,15 @@ import { use, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AuthGuard } from "@/components/AuthGuard";
 import { Sidebar } from "@/components/Sidebar";
+import { TopBar } from "@/components/TopBar";
 import { VitalCard } from "@/components/VitalCard";
 import { VitalsChart } from "@/components/VitalsChart";
 import { VitalsHeatmap } from "@/components/VitalsHeatmap";
 import { EWSForecastChart } from "@/components/EWSForecastChart";
 import { CameraPlayer } from "@/components/CameraPlayer";
+import { Icon } from "@/components/ui/Icon";
 import { useSimulationStore } from "@/store/simulation";
+import { useSidebarStore } from "@/store/sidebar";
 import { computeSlots, currentSlotValues } from "@/lib/simulation/vitals";
 import { calculateEWS } from "@/lib/ews";
 import type { Internacao, SurgicalInternacao } from "@/lib/simulation/types";
@@ -27,9 +30,13 @@ function formatElapsed(admittedAt: number): string {
   const totalMin = Math.floor((Date.now() - admittedAt) / 60_000);
   const h = Math.floor(totalMin / 60);
   const d = Math.floor(h / 24);
-  if (d > 0) return `${d}d ${h % 24}h internado`;
-  if (h > 0) return `${h}h internado`;
-  return `${totalMin}min internado`;
+  if (d > 0) return `${d}d ${h % 24}h`;
+  if (h > 0) return `${h}h`;
+  return `${totalMin}min`;
+}
+
+function formatAdmissionDate(ts: number): string {
+  return new Date(ts).toISOString().split("T")[0];
 }
 
 const SLOT_OPTS  = [{ label: "5min", min: 5 }, { label: "15min", min: 15 }, { label: "1h", min: 60 }] as const;
@@ -312,11 +319,11 @@ const TAB_LABELS: Record<Tab, string> = {
 function PatientContent({ id }: { id: string }) {
   const router = useRouter();
 
-  const [tab, setTab]           = useState<Tab>("sinais-vitais");
-  const [slotMin, setSlotMin]   = useState(15);
-  const [windowMs, setWindowMs] = useState(10_800_000);
-  const [camExpanded, setCamExpanded] = useState(false);
-  const [camHovered, setCamHovered]   = useState(false);
+  const [tab, setTab]                 = useState<Tab>("sinais-vitais");
+  const [slotMin, setSlotMin]         = useState(15);
+  const [windowMs, setWindowMs]       = useState(10_800_000);
+  const [camOpen, setCamOpen]         = useState(false);
+  const [camFullscreen, setCamFullscreen] = useState(false);
 
   const internacao = useSimulationStore((s) => s.internacoes[id] ?? null);
   const bed = useSimulationStore((s) => s.beds.find((b) => b.internacaoId === id) ?? null);
@@ -330,117 +337,152 @@ function PatientContent({ id }: { id: string }) {
   }
 
   const statusColor = STATUS_COLOR[internacao.currentStatus] ?? "var(--muted)";
+  const proxyUrl = process.env.NEXT_PUBLIC_CAMERA_PROXY_URL;
+  const isLiveCamera = bed?.label === "UTI-01" && !!proxyUrl;
+  const streamUrl = `${proxyUrl}/stream/index.m3u8`;
+
+  const metaItems = [
+    `${internacao.patient.age} anos`,
+    internacao.patient.gender === "M" ? "Masculino" : "Feminino",
+    internacao.patient.admissionReason,
+    `Admissão: ${formatAdmissionDate(internacao.patient.admittedAt)}`,
+  ];
 
   return (
-    <div className="flex flex-col min-h-screen" style={{ background: "var(--background)" }}>
-      {/* ── Header ── */}
-      <div className="px-6 py-5 flex gap-6" style={{ borderBottom: "1px solid var(--border)" }}>
-        <div className="flex-1 min-w-0 flex flex-col gap-2">
+    <div className="flex flex-col min-h-0" style={{ background: "var(--background)" }}>
+
+      {/* ── Patient header ── */}
+      <div className="px-6 pt-4 pb-4" style={{ borderBottom: "1px solid var(--border)" }}>
+        {/* Name + EWS badge */}
+        <div className="flex items-center gap-3 mb-1.5 flex-wrap">
           <button
             onClick={() => router.push(`/units/${internacao.unit}`)}
-            className="text-xs flex items-center gap-1 w-fit hover:opacity-70 transition-opacity"
+            className="text-base hover:opacity-70 transition-opacity shrink-0"
             style={{ color: "var(--muted)" }}
+            aria-label={`Voltar para ${UNIT_LABELS[internacao.unit] ?? internacao.unit}`}
           >
-            ← {UNIT_LABELS[internacao.unit] ?? internacao.unit}
-            {bed && <span>&nbsp;·&nbsp;{bed.label}</span>}
+            ←
           </button>
-
-          <div>
-            <h1 className="text-xl font-semibold">{internacao.patient.name}</h1>
-            <p className="text-sm mt-0.5 mb-3">{internacao.patient.admissionReason}</p>
-            <div className="flex flex-col gap-1">
-              {[
-                { label: "Idade",              value: `${internacao.patient.age} anos` },
-                { label: "Gênero",             value: internacao.patient.gender === "M" ? "Masculino" : "Feminino" },
-                { label: "Tempo de Internação", value: formatElapsed(internacao.patient.admittedAt) },
-              ].map(({ label, value }) => (
-                <p key={label} className="text-sm">
-                  <span style={{ color: "var(--muted)" }}>{label}: </span>
-                  <span style={{ color: "var(--foreground)" }}>{value}</span>
-                </p>
-              ))}
-              <p className="text-sm">
-                <span style={{ color: "var(--muted)" }}>EWS: </span>
-                <span
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs tabular-nums"
-                  style={{
-                    background: `${statusColor}18`,
-                    border: `1px solid ${statusColor}55`,
-                    color: statusColor,
-                  }}
-                >
-                  {internacao.currentEws}&nbsp;{internacao.currentStatus}
-                </span>
-              </p>
-            </div>
-          </div>
+          <h1 className="text-xl font-semibold">{internacao.patient.name}</h1>
+          <span
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs tabular-nums"
+            style={{
+              background: `${statusColor}18`,
+              border: `1px solid ${statusColor}55`,
+              color: statusColor,
+            }}
+          >
+            EWS {internacao.currentEws} · {internacao.currentStatus}
+          </span>
         </div>
 
-        {/* Camera */}
-        {(() => {
-          const proxyUrl = process.env.NEXT_PUBLIC_CAMERA_PROXY_URL;
-          const isLiveCamera = bed?.label === "UTI-01" && !!proxyUrl;
-          const streamUrl = `${proxyUrl}/stream/index.m3u8`;
-          return (
-            <>
-              <div
-                className="shrink-0 rounded-lg overflow-hidden transition-all"
-                style={{
-                  width: 320,
-                  height: 200,
-                  cursor: isLiveCamera ? "pointer" : "default",
-                  border: isLiveCamera
-                    ? `2px solid ${camHovered ? "var(--accent)" : "transparent"}`
-                    : "1px solid var(--border)",
-                  boxSizing: "border-box",
-                }}
-                onClick={() => isLiveCamera && setCamExpanded(true)}
-                onMouseEnter={() => isLiveCamera && setCamHovered(true)}
-                onMouseLeave={() => setCamHovered(false)}
-              >
-                {isLiveCamera ? (
-                  <CameraPlayer streamUrl={streamUrl} />
-                ) : (
-                  <div
-                    className="w-full h-full flex flex-col items-center justify-center gap-1"
-                    style={{ background: "var(--surface)", borderRadius: "inherit" }}
-                  >
-                    <svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} style={{ color: "var(--muted)" }}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
-                    </svg>
-                    <span className="text-xs" style={{ color: "var(--muted)" }}>Câmera Indisponível</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Camera modal */}
-              {camExpanded && (
-                <div
-                  className="fixed inset-0 z-50 flex items-center justify-center"
-                  style={{ background: "rgba(0,0,0,0.85)" }}
-                  onClick={() => setCamExpanded(false)}
-                >
-                  <div
-                    className="relative rounded-xl overflow-hidden"
-                    style={{ width: "min(900px, 90vw)", aspectRatio: "16/9" }}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <CameraPlayer streamUrl={streamUrl} />
-                    <button
-                      onClick={() => setCamExpanded(false)}
-                      className="absolute top-3 right-3 rounded-full w-8 h-8 flex items-center justify-center text-sm transition-opacity hover:opacity-80"
-                      style={{ background: "rgba(0,0,0,0.6)", color: "#fff" }}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </div>
-              )}
-            </>
-          );
-        })()}
+        {/* Compact metadata row */}
+        <div
+          className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm pl-6"
+          style={{ color: "var(--muted)" }}
+        >
+          {metaItems.map((item, i) => (
+            <span key={i} className="flex items-center gap-1.5">
+              {i > 0 && <span>·</span>}
+              <span>{item}</span>
+            </span>
+          ))}
+          <span className="flex items-center gap-1.5">
+            <span>·</span>
+            <span style={{ color: "var(--foreground)" }}>
+              ⏱ Internado há {formatElapsed(internacao.patient.admittedAt)}
+            </span>
+          </span>
+        </div>
       </div>
+
+      {/* ── Camera collapsible ── */}
+      <div style={{ borderBottom: "1px solid var(--border)" }}>
+        <button
+          onClick={() => setCamOpen((v) => !v)}
+          className="w-full flex items-center justify-between px-6 py-3 text-sm hover:bg-white/[0.02] transition-colors"
+          style={{ background: "var(--surface)" }}
+        >
+          <div className="flex items-center gap-2.5" style={{ color: "var(--muted)" }}>
+            <Icon name="video" size={15} color="currentColor" />
+            <span>Câmera do {bed?.label ?? "Leito"} — Detecção automática</span>
+          </div>
+          <div className="flex items-center gap-3">
+            {isLiveCamera && (
+              <span
+                className="flex items-center gap-1.5 text-xs"
+                style={{ color: "var(--status-stable)" }}
+              >
+                <span
+                  className="w-1.5 h-1.5 rounded-full shrink-0"
+                  style={{ background: "var(--status-stable)" }}
+                />
+                LIVE
+              </span>
+            )}
+            <Icon
+              name={camOpen ? "chevron-up" : "chevron-down"}
+              size={14}
+              color="var(--muted)"
+            />
+          </div>
+        </button>
+
+        {camOpen && (
+          <div
+            className="relative overflow-hidden"
+            style={{ height: 240, background: "#000" }}
+          >
+            {isLiveCamera ? (
+              <>
+                <CameraPlayer streamUrl={streamUrl} />
+                <button
+                  onClick={() => setCamFullscreen(true)}
+                  className="absolute bottom-3 right-3 text-xs px-2.5 py-1 rounded transition-opacity hover:opacity-80"
+                  style={{ background: "rgba(0,0,0,0.65)", color: "#fff" }}
+                >
+                  ⛶ Expandir
+                </button>
+              </>
+            ) : (
+              <div
+                className="w-full h-full flex flex-col items-center justify-center gap-1.5"
+                style={{ color: "var(--muted)" }}
+              >
+                <svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
+                </svg>
+                <span className="text-xs">Câmera Indisponível</span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Camera fullscreen modal */}
+      {camFullscreen && isLiveCamera && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: "rgba(0,0,0,0.85)" }}
+          onClick={() => setCamFullscreen(false)}
+        >
+          <div
+            className="relative rounded-xl overflow-hidden"
+            style={{ width: "min(900px, 90vw)", aspectRatio: "16/9" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <CameraPlayer streamUrl={streamUrl} />
+            <button
+              onClick={() => setCamFullscreen(false)}
+              className="absolute top-3 right-3 rounded-full w-8 h-8 flex items-center justify-center text-sm transition-opacity hover:opacity-80"
+              style={{ background: "rgba(0,0,0,0.6)", color: "#fff" }}
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Tab nav ── */}
       <div className="flex px-6" style={{ borderBottom: "1px solid var(--border)" }}>
@@ -491,11 +533,20 @@ function PatientContent({ id }: { id: string }) {
 
 export default function PatientPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const collapsed = useSidebarStore((s) => s.collapsed);
   return (
     <AuthGuard>
       <div className="flex min-h-screen">
         <Sidebar />
-        <main className="flex-1 ml-56 overflow-y-auto">
+        <main
+          className="flex-1 overflow-y-auto flex flex-col"
+          style={{
+            marginLeft: collapsed ? 56 : 224,
+            transition: "margin-left 200ms ease",
+            minHeight: "100vh",
+          }}
+        >
+          <TopBar />
           <PatientContent id={id} />
         </main>
       </div>

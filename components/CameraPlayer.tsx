@@ -80,7 +80,7 @@ export function CameraPlayer({ streamUrl }: Props) {
   return (
     <video
       ref={videoRef}
-      className="w-full h-full rounded-lg object-cover bg-black"
+      className="w-full h-full object-contain bg-black"
       muted
       playsInline
     />

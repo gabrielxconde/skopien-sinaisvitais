@@ -3,9 +3,11 @@
 import { use } from "react";
 import { AuthGuard } from "@/components/AuthGuard";
 import { Sidebar } from "@/components/Sidebar";
+import { TopBar } from "@/components/TopBar";
 import { BedCard } from "@/components/BedCard";
 import { SurgicalRoomCard } from "@/components/SurgicalRoomCard";
 import { useSimulationStore } from "@/store/simulation";
+import { useSidebarStore } from "@/store/sidebar";
 import { useShallow } from "zustand/react/shallow";
 
 const UNIT_LABELS: Record<string, string> = {
@@ -80,18 +82,27 @@ function UnitGrid({ unit }: { unit: string }) {
 export default function UnitPage({ params }: { params: Promise<{ unit: string }> }) {
   const { unit } = use(params);
   const label = UNIT_LABELS[unit] ?? unit;
+  const collapsed = useSidebarStore((s) => s.collapsed);
 
   return (
     <AuthGuard>
       <div className="flex min-h-screen">
         <Sidebar />
         <main
-          className="flex-1 ml-56 overflow-y-auto min-h-screen p-6"
-          style={{ background: "var(--background)" }}
+          className="flex-1 overflow-y-auto flex flex-col"
+          style={{
+            marginLeft: collapsed ? 56 : 224,
+            transition: "margin-left 200ms ease",
+            minHeight: "100vh",
+            background: "var(--background)",
+          }}
         >
-          <h1 className="text-lg font-semibold mb-4">{label}</h1>
-          <UnitStats unit={unit} />
-          <UnitGrid unit={unit} />
+          <TopBar />
+          <div className="p-6 flex-1">
+            <h1 className="text-lg font-semibold mb-4">{label}</h1>
+            <UnitStats unit={unit} />
+            <UnitGrid unit={unit} />
+          </div>
         </main>
       </div>
     </AuthGuard>
